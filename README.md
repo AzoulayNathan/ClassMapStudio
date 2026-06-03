@@ -37,7 +37,7 @@ copy .env.example .env.local
 npm run dev
 ```
 
-L'app tourne sur http://localhost:5173
+L'app tourne sur **http://localhost:5174** (port 5174 pour ne pas entrer en conflit avec ClassmapFLE ou d'autres apps sur 5173).
 
 ## Setup
 
