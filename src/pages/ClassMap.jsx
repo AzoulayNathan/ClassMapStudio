@@ -5,18 +5,18 @@ import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Eye, Grid3x3, Users, BarChart3, AlertTriangle, Layers } from "lucide-react";
 import CompetencyBadge from "../components/CompetencyBadge";
+import { useClassSubject } from "@/hooks/useClassSubject";
 import {
-  ALL_CRITERIA, computeTags, computePriorities, computeAlerts, TAG_META, computeReliability,
-} from "../lib/fle-engine";
+  getActiveCompetencies, computeTags, computeCollectivePriorities, computeAlerts,
+  TAG_META, computeReliability, buildObsMap,
+} from "../lib/map-engine";
 
 const PRIORITY_COLOR = { forte: "bg-red-100 text-red-700 border-red-200", moyenne: "bg-amber-100 text-amber-700 border-amber-200", faible: "bg-emerald-100 text-emerald-700 border-emerald-200" };
 const ALERT_COLOR = {
   données_insuffisantes: "border-gray-200 bg-gray-50",
   soutien_prioritaire: "border-red-200 bg-red-50",
-  confiance_orale_basse: "border-amber-200 bg-amber-50",
-  autonomie_faible: "border-yellow-200 bg-yellow-50",
-  décalage_compréhension_production: "border-blue-200 bg-blue-50",
-  élève_ressource: "border-emerald-200 bg-emerald-50",
+  eleve_ressource: "border-emerald-200 bg-emerald-50",
+  confiance_basse: "border-amber-200 bg-amber-50",
 };
 const RELIABILITY_COLOR = {
   "carte solide": "bg-emerald-100 text-emerald-800 border-emerald-200",
@@ -36,11 +36,8 @@ const TABS = [
 export default function ClassMap() {
   const { classId } = useParams();
   const [tab, setTab] = useState("matrix");
-
-  const { data: cls } = useQuery({
-    queryKey: ["class", classId],
-    queryFn: () => base44.entities.ClassGroup.get(classId),
-  });
+  const { classGroup: cls, subject } = useClassSubject(classId);
+  const criteria = getActiveCompetencies(subject, "complete").map(c => ({ ...c, short: c.short_label }));
   const { data: learners = [] } = useQuery({
     queryKey: ["learners", classId],
     queryFn: () => base44.entities.ClassLearner.filter({ class_id: classId, status: "active" }),
@@ -64,21 +61,20 @@ export default function ClassMap() {
     queryFn: () => base44.entities.ClassMapResult.filter({ class_id: classId }, "-created_date", 1),
   });
 
-  const obsMap = {};
-  learnerObs.forEach(lo => { obsMap[lo.learner_id] = lo; });
+  const obsMap = buildObsMap(learnerObs, subject);
 
-  const priorities = computePriorities(learners, obsMap);
-  const alerts = computeAlerts(learners, obsMap);
+  const priorities = computeCollectivePriorities(learners, obsMap, subject);
+  const alerts = computeAlerts(learners, obsMap, subject);
   const mapResult = mapResults[0] || null;
-  const reliability = computeReliability(learners, obsMap);
+  const reliability = computeReliability(learners, obsMap, subject);
 
   // Build summary text fallback
   const strongPriorities = priorities.filter(p => p.priority === "forte");
-  const watchList = alerts.filter(a => a.type !== "élève_ressource");
+  const watchList = alerts.filter(a => a.type !== "eleve_ressource");
   const fallbackSummary = [
     learners.length > 0 ? `${learners.length} apprenant${learners.length > 1 ? "s" : ""} observé${learners.length > 1 ? "s" : ""}.` : "",
     strongPriorities.length > 0 ? `Priorités fortes : ${strongPriorities.slice(0, 2).map(p => p.label).join(", ")}.` : "",
-    watchList.length > 0 ? `${watchList.length} élève${watchList.length > 1 ? "s" : ""} à surveiller.` : "",
+    watchList.length > 0 ? `${watchList.length} apprenant${watchList.length > 1 ? "s" : ""} à surveiller.` : "",
   ].filter(Boolean).join(" ");
 
   let parsedRisks = [];
@@ -91,8 +87,8 @@ export default function ClassMap() {
         <div className="flex items-center gap-3">
           <Link to={`/classes/${classId}`}><Button variant="ghost" size="icon"><ArrowLeft className="h-4 w-4" /></Button></Link>
           <div>
-            <h1 className="font-heading text-2xl font-bold">Carte de classe</h1>
-            <p className="text-sm text-muted-foreground font-body">{cls?.name} · {learners.length} élèves</p>
+            <h1 className="font-heading text-2xl font-bold">Carte du groupe</h1>
+            <p className="text-sm text-muted-foreground font-body">{cls?.name}{subject?.name ? ` · ${subject.name}` : ""} · {learners.length} apprenants</p>
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -165,9 +161,9 @@ export default function ClassMap() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border bg-muted/50">
-                      <th className="text-left px-4 py-3 font-heading font-medium sticky left-0 bg-muted/50 z-10 min-w-[130px]">Élève</th>
-                      {ALL_CRITERIA.map(c => (
-                        <th key={c.key} className="text-center px-2 py-3 font-body font-medium text-muted-foreground text-xs min-w-[78px]" title={c.label}>{c.short}</th>
+                      <th className="text-left px-4 py-3 font-heading font-medium sticky left-0 bg-muted/50 z-10 min-w-[130px]">Apprenant</th>
+                      {criteria.map(c => (
+                        <th key={c.key} className="text-center px-2 py-3 font-body font-medium text-muted-foreground text-xs min-w-[78px]" title={c.label}>{c.short_label}</th>
                       ))}
                       <th className="text-left px-3 py-3 font-body font-medium text-muted-foreground text-xs min-w-[180px]">Profil principal</th>
                     </tr>
@@ -175,14 +171,14 @@ export default function ClassMap() {
                   <tbody>
                     {learners.map(l => {
                       const data = obsMap[l.id] || {};
-                      const { main, secondary } = computeTags(data);
+                      const { main, secondary } = computeTags(data, subject);
                       const mainMeta = TAG_META[main];
                       return (
                         <tr key={l.id} className="border-b border-border last:border-0 hover:bg-muted/20">
                           <td className="px-4 py-2.5 font-body font-medium sticky left-0 bg-card z-10">
                             <Link to={`/learners/${l.id}`} className="hover:text-primary transition-colors">{l.first_name}</Link>
                           </td>
-                          {ALL_CRITERIA.map(c => (
+                          {criteria.map(c => (
                             <td key={c.key} className="px-2 py-2 text-center">
                               <CompetencyBadge level={data[c.key] || "non observé"} size="sm" />
                             </td>
@@ -212,7 +208,7 @@ export default function ClassMap() {
             <div className="space-y-5">
               {Object.entries(TAG_META).map(([tagKey, meta]) => {
                 const matching = learners.filter(l => {
-                  const { main, secondary } = computeTags(obsMap[l.id] || {});
+                  const { main, secondary } = computeTags(obsMap[l.id] || {}, subject);
                   return main === tagKey || secondary.includes(tagKey);
                 });
                 if (matching.length === 0) return null;
@@ -221,14 +217,14 @@ export default function ClassMap() {
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-2">
                         <span className={`text-sm font-medium font-body px-2.5 py-1 rounded-md border ${meta.color}`}>{meta.label}</span>
-                        <span className="text-xs text-muted-foreground font-body">{matching.length} élève{matching.length > 1 ? "s" : ""}</span>
+                        <span className="text-xs text-muted-foreground font-body">{matching.length} apprenant{matching.length > 1 ? "s" : ""}</span>
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {matching.map(l => (
                         <Link key={l.id} to={`/learners/${l.id}`} className="flex items-center gap-1.5 bg-card border border-border rounded-lg px-3 py-1.5 hover:border-primary/30 transition-colors">
                           <span className="font-body text-sm font-medium">{l.first_name}</span>
-                          {l.initial_level_estimate && <span className="text-xs text-muted-foreground">{l.initial_level_estimate}</span>}
+                          {(l.initial_profile_label || l.initial_level_estimate) && <span className="text-xs text-muted-foreground">{l.initial_profile_label || l.initial_level_estimate}</span>}
                         </Link>
                       ))}
                     </div>
@@ -253,7 +249,7 @@ export default function ClassMap() {
                       <div>
                         <h3 className="font-heading font-semibold text-sm">{p.label}</h3>
                         {p.weakCount > 0 && (
-                          <p className="text-xs text-muted-foreground font-body">{p.weakCount} élève{p.weakCount > 1 ? "s" : ""} fragile{p.weakCount > 1 ? "s" : ""}/bloqué{p.weakCount > 1 ? "s" : ""}</p>
+                          <p className="text-xs text-muted-foreground font-body">{p.weakCount} apprenant{p.weakCount > 1 ? "s" : ""} fragile{p.weakCount > 1 ? "s" : ""}/bloqué{p.weakCount > 1 ? "s" : ""}</p>
                         )}
                       </div>
                       <span className={`text-xs font-body font-medium px-2.5 py-1 rounded-full border ${PRIORITY_COLOR[p.priority]}`}>
@@ -337,7 +333,7 @@ export default function ClassMap() {
                         <div key={g.id} className="bg-card border border-border rounded-xl p-4 space-y-2">
                           <div className="flex items-center justify-between">
                             <h3 className="font-heading font-semibold text-sm">{g.group_name}</h3>
-                            <span className="text-xs text-muted-foreground font-body">{memberIds.length} élève{memberIds.length > 1 ? "s" : ""}</span>
+                            <span className="text-xs text-muted-foreground font-body">{memberIds.length} apprenant{memberIds.length > 1 ? "s" : ""}</span>
                           </div>
                           <div className="flex flex-wrap gap-1.5">
                             {memberNames.map(n => (

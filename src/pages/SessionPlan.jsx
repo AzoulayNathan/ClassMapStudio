@@ -6,12 +6,13 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, Wand2, ClipboardList, Loader2, Printer, Target, Clock } from "lucide-react";
 import { toast } from "sonner";
 
+import { useClassSubject } from "@/hooks/useClassSubject";
+
 export default function SessionPlan() {
   const { classId } = useParams();
   const queryClient = useQueryClient();
   const [generating, setGenerating] = useState(false);
-
-  const { data: cls } = useQuery({ queryKey: ["class", classId], queryFn: () => base44.entities.ClassGroup.get(classId) });
+  const { classGroup: cls, subject } = useClassSubject(classId);
   const { data: groups = [] } = useQuery({ queryKey: ["groups", classId], queryFn: () => base44.entities.NeedGroup.filter({ class_id: classId, status: "active" }) });
   const { data: learners = [] } = useQuery({ queryKey: ["learners", classId], queryFn: () => base44.entities.ClassLearner.filter({ class_id: classId, status: "active" }) });
   const { data: reports = [] } = useQuery({ queryKey: ["session-plans", classId], queryFn: () => base44.entities.ClassReport.filter({ class_id: classId, report_type: "session_plan" }, "-created_date", 5) });
@@ -29,24 +30,27 @@ export default function SessionPlan() {
       return `- ${g.group_name}: ${g.rationale}. Membres: ${names}. Activité suggérée: ${g.recommended_activity}`;
     }).join("\n");
 
-    const prompt = `Tu es un expert en pédagogie FLE. Génère un plan de séance différenciée pour cette classe:
-Classe: ${cls?.name || "FLE"}
-Niveau: ${cls?.level_label || "mixte"}
-Objectif principal: ${cls?.main_goal || "oral"}
-Nombre d'élèves: ${learners.length}
+    const sessionLabel = subject?.report_labels?.session || "séance";
+    const subjectName = subject?.name || cls?.subject_name || "matière";
+
+    const prompt = `Tu es un expert en pédagogie pour la matière "${subjectName}". Génère un plan de ${sessionLabel} différenciée pour ce groupe:
+Groupe: ${cls?.name || "groupe"}
+Matière: ${subjectName}
+Objectif principal: ${cls?.main_goal || "à définir"}
+Nombre d'apprenants: ${learners.length}
 
 Groupes de besoin:
 ${groupDescriptions}
 
 Génère un plan structuré avec:
-1. Objectif commun de la séance
-2. Démarrage collectif (5-10 min)
-3. Travail par groupes (pour chaque groupe: consigne, objectif, activité, durée, rôle du professeur)
-4. Mise en commun (5-10 min)
-5. Trace écrite / devoir court
+1. Objectif commun
+2. ${subject?.report_labels?.warm_up || "Démarrage collectif"} (5-10 min)
+3. ${subject?.report_labels?.group_work || "Travail par groupes"} (pour chaque groupe: consigne, objectif, activité, durée, rôle de l'enseignant)
+4. ${subject?.report_labels?.debrief || "Mise en commun"} (5-10 min)
+5. ${subject?.report_labels?.final_activity || "Trace / production / exercice final"}
 6. Points à observer pour la prochaine fois
 
-Sois précis, concret et pratique. Écris en français.`;
+Sois précis, concret et pratique. Écris en français. N'utilise pas de vocabulaire FLE sauf si la matière est FLE.`;
 
     const result = await base44.integrations.Core.InvokeLLM({
       prompt,
@@ -66,18 +70,20 @@ Sois précis, concret et pratique. Écris en français.`;
     await base44.entities.ClassReport.create({
       class_id: classId,
       report_type: "session_plan",
-      title: `Plan de séance — ${new Date().toLocaleDateString("fr-FR")}`,
+      title: `Plan de ${sessionLabel} — ${new Date().toLocaleDateString("fr-FR")}`,
       content_json: JSON.stringify(result),
       export_status: "ready",
     });
 
     queryClient.invalidateQueries({ queryKey: ["session-plans", classId] });
     setGenerating(false);
-    toast.success("Plan de séance généré");
+    toast.success(`Plan de ${sessionLabel} généré`);
   };
 
   const latestPlan = reports[0];
   const planData = latestPlan ? (() => { try { return JSON.parse(latestPlan.content_json); } catch { return null; } })() : null;
+
+  const sessionLabel = subject?.report_labels?.session || "séance";
 
   return (
     <div className="space-y-8">
@@ -85,8 +91,8 @@ Sois précis, concret et pratique. Écris en français.`;
         <div className="flex items-center gap-3">
           <Link to={`/classes/${classId}`}><Button variant="ghost" size="icon"><ArrowLeft className="h-4 w-4" /></Button></Link>
           <div>
-            <h1 className="font-heading text-2xl font-bold">Plan de séance</h1>
-            <p className="text-sm text-muted-foreground font-body">{cls?.name} · {groups.length} groupe{groups.length !== 1 ? "s" : ""}</p>
+            <h1 className="font-heading text-2xl font-bold">Plan de {sessionLabel} / atelier</h1>
+            <p className="text-sm text-muted-foreground font-body">{cls?.name}{subject?.name ? ` · ${subject.name}` : ""} · {groups.length} groupe{groups.length !== 1 ? "s" : ""}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">

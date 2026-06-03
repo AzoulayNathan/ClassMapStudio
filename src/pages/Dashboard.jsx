@@ -16,7 +16,7 @@ function ClassWorkflowCard({ cls, learnerCount, lastCompletedObs, hasGroups, has
   } else if (!hasSessionPlan) {
     nextStep = { label: "Préparer la séance", to: `/classes/${cls.id}/session-plan`, icon: ClipboardList, color: "text-orange-600", bgColor: "bg-orange-50 border-orange-200" };
   } else {
-    nextStep = { label: "Classe prête", to: `/classes/${cls.id}`, icon: CheckCircle2, color: "text-emerald-600", bgColor: "bg-emerald-50 border-emerald-200" };
+    nextStep = { label: "Groupe prêt", to: `/classes/${cls.id}`, icon: CheckCircle2, color: "text-emerald-600", bgColor: "bg-emerald-50 border-emerald-200" };
   }
 
   return (
@@ -27,7 +27,8 @@ function ClassWorkflowCard({ cls, learnerCount, lastCompletedObs, hasGroups, has
           <div>
             <h3 className="font-heading font-semibold text-foreground">{cls.name}</h3>
             <div className="flex flex-wrap items-center gap-2 mt-1">
-              {cls.level_label && <span className="bg-primary/10 text-primary text-xs px-2 py-0.5 rounded-md font-body">{cls.level_label}</span>}
+              {cls.subject_name && <span className="bg-primary/10 text-primary text-xs px-2 py-0.5 rounded-md font-body">{cls.subject_name}</span>}
+              {cls.level_label && <span className="bg-muted text-xs px-2 py-0.5 rounded-md font-body">{cls.level_label}</span>}
               {cls.context_type && <span className="text-xs text-muted-foreground font-body">{cls.context_type}</span>}
             </div>
           </div>
@@ -129,13 +130,13 @@ export default function Dashboard() {
           <h1 className="font-heading text-2xl font-bold text-foreground">Tableau de bord</h1>
           <p className="text-sm text-muted-foreground font-body mt-1">
             {activeClasses.length > 0
-              ? `${activeClasses.length} classe${activeClasses.length > 1 ? "s" : ""} active${activeClasses.length > 1 ? "s" : ""} · ${learners.length} apprenant${learners.length !== 1 ? "s" : ""}`
-              : "Commencez par créer une classe"}
+              ? `${activeClasses.length} groupe${activeClasses.length > 1 ? "s" : ""} actif${activeClasses.length > 1 ? "s" : ""} · ${learners.length} apprenant${learners.length !== 1 ? "s" : ""}`
+              : "Commencez par créer une carte"}
           </p>
         </div>
         <Link to="/classes/new">
           <Button className="font-body gap-2">
-            <Plus className="h-4 w-4" /> Nouvelle classe
+            <Plus className="h-4 w-4" /> Nouvelle carte
           </Button>
         </Link>
       </div>
@@ -169,19 +170,19 @@ export default function Dashboard() {
           <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
             <BookOpen className="h-8 w-8 text-primary" />
           </div>
-          <h3 className="font-heading font-semibold text-lg mb-2">Aucune classe pour l'instant</h3>
+          <h3 className="font-heading font-semibold text-lg mb-2">Aucun groupe pour l'instant</h3>
           <p className="text-sm text-muted-foreground font-body mb-6 max-w-sm mx-auto">
-            Créez votre première classe pour commencer à cartographier les besoins de vos apprenants.
+            Créez votre première carte pour visualiser les besoins de vos apprenants.
           </p>
           <Link to="/classes/new">
             <Button className="font-body gap-2">
-              <Plus className="h-4 w-4" /> Créer une classe
+              <Plus className="h-4 w-4" /> Créer une carte
             </Button>
           </Link>
         </div>
       ) : (
         <div>
-          <h2 className="font-heading text-base font-semibold mb-4 text-muted-foreground uppercase tracking-wide text-xs">Mes classes</h2>
+          <h2 className="font-heading text-base font-semibold mb-4 text-muted-foreground uppercase tracking-wide text-xs">Mes groupes</h2>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {activeClasses.map(cls => {
               const classLearners = learners.filter(l => l.class_id === cls.id);

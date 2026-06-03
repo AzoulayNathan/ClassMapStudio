@@ -1,9 +1,13 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
+import { listTemplates, createCustomSubject } from "@/api/subjects";
+import { seedDemoData } from "@/lib/demo-seed";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { toast } from "sonner";
 
 const PREFS_KEY = "classmap_prefs";
 
@@ -24,8 +28,14 @@ export default function Settings() {
   const [user, setUser] = useState(null);
   const [prefs, setPrefs] = useState(loadPrefs);
   const [saved, setSaved] = useState(false);
+  const [templates, setTemplates] = useState([]);
+  const [seeding, setSeeding] = useState(false);
+  const [customForm, setCustomForm] = useState({ name: "", description: "", competencies: "", context: "", goal: "" });
 
-  useEffect(() => { base44.auth.me().then(setUser).catch(() => {}); }, []);
+  useEffect(() => {
+    base44.auth.me().then(setUser).catch(() => {});
+    listTemplates().then(setTemplates).catch(() => {});
+  }, []);
 
   const setPref = (key, value) => setPrefs(p => ({ ...p, [key]: value }));
 
@@ -35,22 +45,47 @@ export default function Settings() {
     setTimeout(() => setSaved(false), 2000);
   };
 
+  const handleCreateSubject = async () => {
+    if (!customForm.name.trim()) { toast.error("Nom de matière requis"); return; }
+    try {
+      await createCustomSubject({
+        name: customForm.name,
+        description: customForm.description || customForm.goal,
+        category: "custom",
+        competenciesText: customForm.competencies,
+        createdBy: user?.id,
+      });
+      toast.success("Matière personnalisée créée");
+      setCustomForm({ name: "", description: "", competencies: "", context: "", goal: "" });
+      listTemplates().then(setTemplates);
+    } catch {
+      toast.error("Impossible de créer la matière (vérifiez Supabase)");
+    }
+  };
+
+  const handleSeedDemos = async () => {
+    setSeeding(true);
+    try {
+      const groups = await seedDemoData();
+      toast.success(`${groups.length} groupes démo créés`);
+    } catch (e) {
+      toast.error("Erreur lors du chargement des démos");
+      console.error(e);
+    }
+    setSeeding(false);
+  };
+
   return (
     <div className="max-w-xl mx-auto space-y-8">
       <div>
         <h1 className="font-heading text-2xl font-bold">Paramètres</h1>
-        <p className="text-sm text-muted-foreground font-body mt-1">Préférences et informations</p>
+        <p className="text-sm text-muted-foreground font-body mt-1">Matières, modèles et préférences</p>
       </div>
 
-      {/* Profil */}
       <div className="bg-card border border-border rounded-xl p-6 space-y-4">
         <h2 className="font-heading font-semibold">Profil</h2>
         {user ? (
           <>
-            <div>
-              <Label className="font-body text-sm">Nom</Label>
-              <Input value={user.full_name || ""} disabled className="mt-1 bg-muted font-body" />
-            </div>
             <div>
               <Label className="font-body text-sm">Email</Label>
               <Input value={user.email || ""} disabled className="mt-1 bg-muted font-body" />
@@ -61,100 +96,80 @@ export default function Settings() {
         )}
       </div>
 
-      {/* Préférences */}
+      <div className="bg-card border border-border rounded-xl p-6 space-y-4">
+        <h2 className="font-heading font-semibold">Matières et modèles</h2>
+        <p className="text-sm text-muted-foreground font-body">Modèles disponibles pour créer une carte.</p>
+        <ul className="space-y-2">
+          {templates.filter(t => t.slug !== "custom_blank").map(t => (
+            <li key={t.slug} className="text-sm font-body flex justify-between border border-border rounded-lg px-3 py-2">
+              <span className="font-medium">{t.name}</span>
+              <span className="text-muted-foreground text-xs">{t.category}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <div className="bg-card border border-border rounded-xl p-6 space-y-4">
+        <h2 className="font-heading font-semibold">Créer une matière personnalisée</h2>
+        <div>
+          <Label>Nom de la matière</Label>
+          <Input value={customForm.name} onChange={e => setCustomForm(f => ({ ...f, name: e.target.value }))} className="mt-1.5" placeholder="Ex : Yoga, Théâtre..." />
+        </div>
+        <div>
+          <Label>Compétences (une par ligne)</Label>
+          <Textarea value={customForm.competencies} onChange={e => setCustomForm(f => ({ ...f, competencies: e.target.value }))} className="mt-1.5" rows={4} placeholder="Posture&#10;Respiration&#10;Concentration" />
+        </div>
+        <div>
+          <Label>Objectif général</Label>
+          <Input value={customForm.goal} onChange={e => setCustomForm(f => ({ ...f, goal: e.target.value }))} className="mt-1.5" />
+        </div>
+        <Button onClick={handleCreateSubject} className="w-full font-body">Créer la matière</Button>
+      </div>
+
       <div className="bg-card border border-border rounded-xl p-6 space-y-5">
         <h2 className="font-heading font-semibold">Préférences pédagogiques</h2>
-
         <div>
           <Label className="font-body text-sm">Type d'observation par défaut</Label>
           <Select value={prefs.default_obs_type} onValueChange={v => setPref("default_obs_type", v)}>
             <SelectTrigger className="mt-1.5 font-body"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="quick">Rapide — 5 critères</SelectItem>
-              <SelectItem value="standard">Standard — 9 critères (recommandé)</SelectItem>
-              <SelectItem value="complete">Complète — 10 critères détaillés</SelectItem>
+              <SelectItem value="quick">Rapide</SelectItem>
+              <SelectItem value="standard">Standard (recommandé)</SelectItem>
+              <SelectItem value="complete">Complète</SelectItem>
             </SelectContent>
           </Select>
         </div>
-
         <div>
-          <Label className="font-body text-sm">Taille max recommandée par groupe</Label>
+          <Label className="font-body text-sm">Taille max par groupe</Label>
           <Select value={prefs.max_group_size} onValueChange={v => setPref("max_group_size", v)}>
             <SelectTrigger className="mt-1.5 font-body"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="3">3 élèves</SelectItem>
-              <SelectItem value="4">4 élèves</SelectItem>
-              <SelectItem value="5">5 élèves (recommandé)</SelectItem>
-              <SelectItem value="6">6 élèves</SelectItem>
+              {[3, 4, 5, 6].map(n => <SelectItem key={n} value={String(n)}>{n} apprenants</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
-
-        <div>
-          <Label className="font-body text-sm">Inclure les élèves ressources dans la génération</Label>
-          <Select value={prefs.include_resource_learners} onValueChange={v => setPref("include_resource_learners", v)}>
-            <SelectTrigger className="mt-1.5 font-body"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="oui">Oui — inclure dans un groupe défi</SelectItem>
-              <SelectItem value="non">Non — ne pas les regrouper</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div>
-          <Label className="font-body text-sm">Durée de séance par défaut</Label>
-          <Select value={prefs.session_duration} onValueChange={v => setPref("session_duration", v)}>
-            <SelectTrigger className="mt-1.5 font-body"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="30">30 minutes</SelectItem>
-              <SelectItem value="45">45 minutes</SelectItem>
-              <SelectItem value="60">60 minutes</SelectItem>
-              <SelectItem value="90">90 minutes</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div>
-          <Label className="font-body text-sm">Format de rapport</Label>
-          <Select value={prefs.report_format} onValueChange={v => setPref("report_format", v)}>
-            <SelectTrigger className="mt-1.5 font-body"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="court">Court — synthèse et groupes uniquement</SelectItem>
-              <SelectItem value="complet">Complet — tous les éléments</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
         <Button onClick={handleSave} className="w-full font-body">
           {saved ? "✓ Préférences sauvegardées" : "Sauvegarder les préférences"}
         </Button>
-        <p className="text-xs text-muted-foreground font-body text-center">Les préférences sont enregistrées localement sur cet appareil.</p>
       </div>
 
-      {/* À propos */}
+      <div className="bg-card border border-border rounded-xl p-6 space-y-3">
+        <h2 className="font-heading font-semibold">Données de démo</h2>
+        <p className="text-sm text-muted-foreground font-body">Crée 4 groupes exemples (FLE, Maths, Informatique, Chant) avec observations et groupes.</p>
+        <Button variant="outline" onClick={handleSeedDemos} disabled={seeding} className="w-full font-body">
+          {seeding ? "Création..." : "Charger les démos"}
+        </Button>
+      </div>
+
       <div className="bg-card border border-border rounded-xl p-6 space-y-2">
         <h2 className="font-heading font-semibold">À propos</h2>
         <p className="font-body text-sm text-muted-foreground">
-          ClassMap FLE aide les professeurs à visualiser les besoins d'une classe et organiser des groupes de travail.
-          Ce n'est pas un outil de notation ni un LMS : c'est une carte pédagogique pour préparer des séances différenciées.
+          ClassMap Studio aide les enseignants, tuteurs, coaches et formateurs à visualiser les besoins d'un groupe d'apprenants et organiser des groupes de travail adaptés — quelle que soit la matière.
         </p>
       </div>
 
-      {/* Confidentialité */}
-      <div className="bg-muted/40 border border-border rounded-xl p-6 space-y-2">
-        <h2 className="font-heading font-semibold">Confidentialité</h2>
-        <ul className="space-y-1.5 font-body text-sm text-muted-foreground list-none">
-          <li>→ Ne stocker que les informations pédagogiques nécessaires.</li>
-          <li>→ Éviter les informations sensibles (santé, situation personnelle).</li>
-          <li>→ Attention lors d'observations impliquant des mineurs.</li>
-          <li>→ Les exports sont à partager avec prudence.</li>
-        </ul>
-      </div>
-
       <div className="text-center">
-        <Button variant="outline" onClick={() => base44.auth.logout()} className="font-body">
-          Se déconnecter
-        </Button>
+        <Button variant="outline" onClick={() => base44.auth.logout()} className="font-body">Se déconnecter</Button>
       </div>
     </div>
   );

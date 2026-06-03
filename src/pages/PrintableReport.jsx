@@ -4,7 +4,11 @@ import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Printer } from "lucide-react";
 import CompetencyBadge from "../components/CompetencyBadge";
-import { computePriorities, computeAlerts, computeTags, TAG_META, ALL_CRITERIA, computeReliability } from "../lib/fle-engine";
+import { useClassSubject } from "@/hooks/useClassSubject";
+import {
+  getActiveCompetencies, computeCollectivePriorities, computeAlerts, computeTags,
+  TAG_META, computeReliability, buildObsMap,
+} from "../lib/map-engine";
 
 const PRIORITY_COLOR = {
   forte: "text-red-700",
@@ -15,7 +19,8 @@ const PRIORITY_COLOR = {
 export default function PrintableReport() {
   const { classId } = useParams();
 
-  const { data: cls } = useQuery({ queryKey: ["class", classId], queryFn: () => base44.entities.ClassGroup.get(classId) });
+  const { classGroup: cls, subject } = useClassSubject(classId);
+  const criteria = getActiveCompetencies(subject, "complete");
   const { data: learners = [] } = useQuery({ queryKey: ["learners", classId], queryFn: () => base44.entities.ClassLearner.filter({ class_id: classId, status: "active" }) });
   const { data: observations = [] } = useQuery({ queryKey: ["observations", classId], queryFn: () => base44.entities.ClassObservation.filter({ class_id: classId, status: "completed" }, "-created_date", 1) });
   const lastObs = observations[0];
@@ -27,17 +32,16 @@ export default function PrintableReport() {
   const { data: groups = [] } = useQuery({ queryKey: ["groups", classId], queryFn: () => base44.entities.NeedGroup.filter({ class_id: classId, status: "active" }) });
   const { data: sessionPlans = [] } = useQuery({ queryKey: ["session-plans", classId], queryFn: () => base44.entities.ClassReport.filter({ class_id: classId, report_type: "session_plan" }, "-created_date", 1) });
 
-  const obsMap = {};
-  learnerObs.forEach(lo => { obsMap[lo.learner_id] = lo; });
+  const obsMap = buildObsMap(learnerObs, subject);
   const learnerMap = {};
   learners.forEach(l => { learnerMap[l.id] = l; });
 
-  const priorities = computePriorities(learners, obsMap);
-  const reliability = computeReliability(learners, obsMap);
-  const alerts = computeAlerts(learners, obsMap);
+  const priorities = computeCollectivePriorities(learners, obsMap, subject);
+  const reliability = computeReliability(learners, obsMap, subject);
+  const alerts = computeAlerts(learners, obsMap, subject);
   const highPriorities = priorities.filter(p => p.priority === "forte" || p.priority === "moyenne");
-  const watchList = alerts.filter(a => a.type !== "élève_ressource");
-  const resources = alerts.filter(a => a.type === "élève_ressource");
+  const watchList = alerts.filter(a => a.type !== "eleve_ressource");
+  const resources = alerts.filter(a => a.type === "eleve_ressource");
 
   const latestPlan = sessionPlans[0];
   const planData = latestPlan ? (() => { try { return JSON.parse(latestPlan.content_json); } catch { return null; } })() : null;
@@ -69,7 +73,7 @@ export default function PrintableReport() {
         <div className="border-b-2 border-foreground pb-4">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-xs font-body font-medium text-muted-foreground uppercase tracking-widest mb-1">ClassMap FLE — Carte pédagogique</p>
+              <p className="text-xs font-body font-medium text-muted-foreground uppercase tracking-widest mb-1">ClassMap Studio — Carte pédagogique{subject?.name ? ` · ${subject.name}` : ""}</p>
               <h1 className="font-heading text-2xl font-bold">{cls?.name}</h1>
               <div className="flex flex-wrap gap-3 mt-2 text-sm font-body text-muted-foreground">
                 {cls?.level_label && <span>Niveau : <strong>{cls.level_label}</strong></span>}
@@ -96,7 +100,7 @@ export default function PrintableReport() {
         {/* 1. Synthèse */}
         {lastObs && (
           <section className="space-y-3">
-            <h2 className="font-heading text-lg font-bold border-b border-border pb-2">1. Synthèse de classe</h2>
+            <h2 className="font-heading text-lg font-bold border-b border-border pb-2">1. Synthèse du groupe</h2>
             <div className="bg-muted/30 rounded-xl p-4 space-y-2 text-sm font-body">
               <p>Cette classe compte <strong>{learners.length} apprenants</strong> de niveau {cls?.level_label || "non défini"} en contexte {cls?.context_type || "non défini"}.</p>
               {highPriorities.length > 0 && (
@@ -144,9 +148,9 @@ export default function PrintableReport() {
               <table className="w-full text-xs border border-border rounded-xl overflow-hidden">
                 <thead>
                   <tr className="bg-muted/50 border-b border-border">
-                    <th className="text-left px-3 py-2 font-heading font-semibold min-w-[100px]">Élève</th>
-                    {ALL_CRITERIA.slice(0, 8).map(c => (
-                      <th key={c.key} className="text-center px-1.5 py-2 font-body font-medium text-muted-foreground" title={c.label}>{c.short}</th>
+                    <th className="text-left px-3 py-2 font-heading font-semibold min-w-[100px]">Apprenant</th>
+                    {criteria.slice(0, 8).map(c => (
+                      <th key={c.key} className="text-center px-1.5 py-2 font-body font-medium text-muted-foreground" title={c.label}>{c.short_label}</th>
                     ))}
                     <th className="text-left px-3 py-2 font-body font-medium text-muted-foreground">Profil</th>
                   </tr>
@@ -154,12 +158,12 @@ export default function PrintableReport() {
                 <tbody>
                   {learners.map(l => {
                     const data = obsMap[l.id] || {};
-                    const { main } = computeTags(data);
+                    const { main } = computeTags(data, subject);
                     const mainMeta = TAG_META[main];
                     return (
                       <tr key={l.id} className="border-b border-border last:border-0">
                         <td className="px-3 py-1.5 font-body font-medium">{l.first_name}</td>
-                        {ALL_CRITERIA.slice(0, 8).map(c => (
+                        {criteria.slice(0, 8).map(c => (
                           <td key={c.key} className="px-1 py-1 text-center">
                             <CompetencyBadge level={data[c.key] || "non observé"} size="sm" />
                           </td>
@@ -293,7 +297,7 @@ export default function PrintableReport() {
 
         {/* Footer */}
         <div className="border-t border-border pt-4 text-center text-xs text-muted-foreground font-body space-y-1">
-          <p>ClassMap FLE — Carte pédagogique, non officielle.</p>
+          <p>ClassMap Studio — Carte pédagogique personnalisée, non officielle.</p>
           <p>{cls?.name} · {cls?.level_label} · {cls?.context_type} · {learners.length} apprenant{learners.length !== 1 ? "s" : ""} · {today}</p>
         </div>
       </div>

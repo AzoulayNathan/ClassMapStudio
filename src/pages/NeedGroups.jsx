@@ -13,7 +13,8 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { generateNeedGroups } from "../lib/fle-engine";
+import { generateNeedGroups, buildObsMap } from "../lib/map-engine";
+import { useClassSubject } from "@/hooks/useClassSubject";
 
 const PRIORITY_BADGE = {
   haute:   "bg-red-100 text-red-700 border-red-200",
@@ -32,7 +33,7 @@ export default function NeedGroups() {
   const [showNewGroup, setShowNewGroup] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
 
-  const { data: cls } = useQuery({ queryKey: ["class", classId], queryFn: () => base44.entities.ClassGroup.get(classId) });
+  const { classGroup: cls, subject } = useClassSubject(classId);
   const { data: learners = [] } = useQuery({ queryKey: ["learners", classId], queryFn: () => base44.entities.ClassLearner.filter({ class_id: classId, status: "active" }) });
   const { data: observations = [] } = useQuery({ queryKey: ["observations", classId], queryFn: () => base44.entities.ClassObservation.filter({ class_id: classId, status: "completed" }, "-created_date", 1) });
   const lastObs = observations[0];
@@ -46,8 +47,7 @@ export default function NeedGroups() {
     queryFn: () => base44.entities.NeedGroup.filter({ class_id: classId, status: "active" }),
   });
 
-  const obsMap = {};
-  learnerObs.forEach(lo => { obsMap[lo.learner_id] = lo; });
+  const obsMap = buildObsMap(learnerObs, subject);
   const learnerMap = {};
   learners.forEach(l => { learnerMap[l.id] = l; });
 
@@ -69,7 +69,7 @@ export default function NeedGroups() {
   const handleGenerate = async () => {
     if (!lastObs) { toast.error("Aucune observation terminée — lancez une observation d'abord."); return; }
     setGenerating(true);
-    const generated = generateNeedGroups(learners, obsMap);
+    const generated = generateNeedGroups(learners, obsMap, subject);
     if (generated.length === 0) { toast.info("Aucun groupe à générer avec les données actuelles."); setGenerating(false); return; }
     for (const g of generated) {
       await createGroup.mutateAsync({
@@ -77,6 +77,8 @@ export default function NeedGroups() {
         observation_id: lastObs.id,
         group_name: g.name,
         group_type: g.type,
+        priority_competency_key: g.type,
+        priority_competency_label: g.name,
         priority_skill: g.type,
         learner_ids_json: JSON.stringify(g.memberIds),
         rationale: `${g.risk} ${g.action}`,

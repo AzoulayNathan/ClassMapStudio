@@ -8,6 +8,8 @@ const ENTITY_TABLES = {
   NeedGroup: 'need_groups',
   ClassMapResult: 'class_map_results',
   ClassReport: 'class_reports',
+  SubjectTemplate: 'subject_templates',
+  CustomSubject: 'custom_subjects',
 };
 
 function applySort(query, sort) {

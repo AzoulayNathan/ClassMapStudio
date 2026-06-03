@@ -4,7 +4,7 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn('ClassmapFLE: VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY must be set.');
+  console.warn('ClassMap Studio: VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY must be set.');
 }
 
 export const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '', {

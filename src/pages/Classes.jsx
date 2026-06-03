@@ -26,18 +26,18 @@ export default function Classes() {
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-heading text-2xl font-bold">Mes classes</h1>
-          <p className="text-sm text-muted-foreground font-body mt-1">{active.length} classe{active.length !== 1 ? "s" : ""} active{active.length !== 1 ? "s" : ""}</p>
+          <h1 className="font-heading text-2xl font-bold">Mes groupes</h1>
+          <p className="text-sm text-muted-foreground font-body mt-1">{active.length} groupe{active.length !== 1 ? "s" : ""} actif{active.length !== 1 ? "s" : ""}</p>
         </div>
         <Link to="/classes/new">
-          <Button className="font-body gap-2"><Plus className="h-4 w-4" /> Nouvelle classe</Button>
+          <Button className="font-body gap-2"><Plus className="h-4 w-4" /> Nouvelle carte</Button>
         </Link>
       </div>
 
       {active.length === 0 ? (
         <div className="text-center py-16 bg-card rounded-xl border border-border">
-          <p className="text-muted-foreground font-body mb-4">Aucune classe pour l'instant.</p>
-          <Link to="/classes/new"><Button className="font-body gap-2"><Plus className="h-4 w-4" /> Créer une classe</Button></Link>
+          <p className="text-muted-foreground font-body mb-4">Aucun groupe pour l'instant.</p>
+          <Link to="/classes/new"><Button className="font-body gap-2"><Plus className="h-4 w-4" /> Créer une carte</Button></Link>
         </div>
       ) : (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -52,7 +52,8 @@ export default function Classes() {
                   </div>
                   <div className="space-y-1 text-sm font-body text-muted-foreground">
                     <p>{count} apprenant{count !== 1 ? "s" : ""}</p>
-                    {cls.level_label && <p>{cls.level_label} · {cls.context_type}</p>}
+                    {cls.subject_name && <p className="text-primary font-medium">{cls.subject_name}</p>}
+                    {cls.context_type && <p>{cls.context_type}</p>}
                     {cls.main_goal && <p>Objectif : {cls.main_goal}</p>}
                   </div>
                 </div>

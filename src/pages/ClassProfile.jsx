@@ -6,16 +6,13 @@ import { ArrowLeft, Plus, Eye, Map, Layers, ClipboardList, FileText, Users, Tras
 import StatCard from "../components/StatCard";
 import CompetencyBadge from "../components/CompetencyBadge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { computePriorities, computeAlerts } from "../lib/fle-engine";
+import { useClassSubject } from "@/hooks/useClassSubject";
+import { computeCollectivePriorities, computeAlerts, buildObsMap } from "../lib/map-engine";
 
 export default function ClassProfile() {
   const { classId } = useParams();
   const queryClient = useQueryClient();
-
-  const { data: cls, isLoading } = useQuery({
-    queryKey: ["class", classId],
-    queryFn: () => base44.entities.ClassGroup.get(classId),
-  });
+  const { classGroup: cls, subject, isLoading } = useClassSubject(classId);
 
   const { data: learners = [] } = useQuery({
     queryKey: ["learners", classId],
@@ -40,13 +37,12 @@ export default function ClassProfile() {
     queryFn: () => base44.entities.NeedGroup.filter({ class_id: classId, status: "active" }),
   });
 
-  const obsMap = {};
-  learnerObs.forEach(lo => { obsMap[lo.learner_id] = lo; });
+  const obsMap = buildObsMap(learnerObs, subject);
 
-  const priorities = computePriorities(learners, obsMap);
-  const alerts = computeAlerts(learners, obsMap);
+  const priorities = computeCollectivePriorities(learners, obsMap, subject);
+  const alerts = computeAlerts(learners, obsMap, subject);
   const topPriorities = priorities.filter(p => p.priority === "forte" || p.priority === "moyenne").slice(0, 3);
-  const watchAlerts = alerts.filter(a => a.type !== "élève_ressource").slice(0, 4);
+  const watchAlerts = alerts.filter(a => a.type !== "eleve_ressource").slice(0, 4);
 
   const deleteLearner = useMutation({
     mutationFn: (id) => base44.entities.ClassLearner.delete(id),
@@ -57,7 +53,7 @@ export default function ClassProfile() {
     return <div className="flex items-center justify-center h-64"><div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" /></div>;
   }
 
-  if (!cls) return <div className="text-center py-16 text-muted-foreground font-body">Classe introuvable.</div>;
+  if (!cls) return <div className="text-center py-16 text-muted-foreground font-body">Groupe introuvable.</div>;
 
   const lastObs = observations[0];
   const completedObs = observations.filter(o => o.status === "completed").length;
@@ -71,7 +67,8 @@ export default function ClassProfile() {
           <div>
             <h1 className="font-heading text-2xl font-bold">{cls.name}</h1>
             <div className="flex flex-wrap items-center gap-2 mt-1 text-sm text-muted-foreground font-body">
-              {cls.level_label && <span className="bg-primary/10 text-primary px-2 py-0.5 rounded-md text-xs font-medium">{cls.level_label}</span>}
+              {subject?.name && <span className="bg-primary/10 text-primary px-2 py-0.5 rounded-md text-xs font-medium">{subject.name}</span>}
+              {cls.level_label && <span className="bg-muted px-2 py-0.5 rounded-md text-xs">{cls.level_label}</span>}
               {cls.context_type && <span>{cls.context_type}</span>}
               {cls.main_goal && <span>· {cls.main_goal}</span>}
             </div>
@@ -89,9 +86,9 @@ export default function ClassProfile() {
         {[
           { to: `/classes/${classId}/add-learners`, icon: Plus, label: "Ajouter apprenant" },
           { to: `/classes/${classId}/observe`, icon: Eye, label: "Observation" },
-          { to: `/classes/${classId}/map`, icon: Map, label: "Carte de classe" },
+          { to: `/classes/${classId}/map`, icon: Map, label: "Carte du groupe" },
           { to: `/classes/${classId}/groups`, icon: Layers, label: "Groupes" },
-          { to: `/classes/${classId}/session-plan`, icon: ClipboardList, label: "Plan séance" },
+          { to: `/classes/${classId}/session-plan`, icon: ClipboardList, label: "Plan / atelier" },
           { to: `/classes/${classId}/reports`, icon: FileText, label: "Rapports" },
         ].map(a => (
           <Link key={a.to} to={a.to}>
@@ -157,7 +154,7 @@ export default function ClassProfile() {
         </div>
         {learners.length === 0 ? (
           <div className="text-center py-12 bg-card rounded-xl border border-border">
-            <p className="text-muted-foreground font-body mb-4">Aucun apprenant dans cette classe.</p>
+            <p className="text-muted-foreground font-body mb-4">Aucun apprenant dans ce groupe.</p>
             <Link to={`/classes/${classId}/add-learners`}>
               <Button className="font-body gap-2"><Plus className="h-4 w-4" /> Ajouter des apprenants</Button>
             </Link>

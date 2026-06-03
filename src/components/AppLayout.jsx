@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 
 const navItems = [
   { to: "/dashboard", icon: LayoutDashboard, label: "Tableau de bord" },
-  { to: "/classes", icon: GraduationCap, label: "Mes classes" },
+  { to: "/classes", icon: GraduationCap, label: "Mes groupes" },
   { to: "/settings", icon: Settings, label: "Paramètres" },
 ];
 
@@ -21,7 +21,7 @@ export default function AppLayout() {
             <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
               <Map className="h-4 w-4 text-primary-foreground" />
             </div>
-            <span className="font-heading font-semibold text-lg text-foreground">ClassMap FLE</span>
+            <span className="font-heading font-semibold text-lg text-foreground">ClassMap Studio</span>
           </Link>
         </div>
         <nav className="flex-1 p-4 space-y-1">
@@ -58,7 +58,7 @@ export default function AppLayout() {
           <div className="h-7 w-7 rounded-lg bg-primary flex items-center justify-center">
             <Map className="h-3.5 w-3.5 text-primary-foreground" />
           </div>
-          <span className="font-heading font-semibold text-foreground">ClassMap FLE</span>
+          <span className="font-heading font-semibold text-foreground">ClassMap Studio</span>
         </Link>
         <div className="flex items-center gap-2">
           {navItems.map(item => (
