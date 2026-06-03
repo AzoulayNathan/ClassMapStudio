@@ -15,17 +15,16 @@ export default function AddLearners() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  // Manual form
-  const [manual, setManual] = useState({ first_name: "", age: "", main_language: "", initial_level_estimate: "", notes: "" });
-
-  // Quick paste
+  const [manual, setManual] = useState({
+    first_name: "", age: "", background_info: "", initial_profile_label: "", notes: "",
+  });
   const [quickText, setQuickText] = useState("");
 
   const createOne = useMutation({
     mutationFn: (data) => base44.entities.ClassLearner.create({ ...data, class_id: classId, status: "active" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["learners", classId] });
-      setManual({ first_name: "", age: "", main_language: "", initial_level_estimate: "", notes: "" });
+      setManual({ first_name: "", age: "", background_info: "", initial_profile_label: "", notes: "" });
       toast.success("Apprenant ajouté");
     },
   });
@@ -44,8 +43,10 @@ export default function AddLearners() {
     createOne.mutate({
       first_name: manual.first_name.trim(),
       age: manual.age ? Number(manual.age) : undefined,
-      main_language: manual.main_language.trim() || undefined,
-      initial_level_estimate: manual.initial_level_estimate || undefined,
+      background_info: manual.background_info.trim() || undefined,
+      main_language: manual.background_info.trim() || undefined,
+      initial_profile_label: manual.initial_profile_label.trim() || undefined,
+      initial_level_estimate: manual.initial_profile_label.trim() || undefined,
       notes: manual.notes.trim() || undefined,
     });
   };
@@ -58,9 +59,15 @@ export default function AddLearners() {
       if (parts[1]) {
         const num = parseInt(parts[1]);
         if (!isNaN(num) && num > 0 && num < 120) learner.age = num;
-        else learner.main_language = parts[1];
+        else {
+          learner.background_info = parts[1];
+          learner.main_language = parts[1];
+        }
       }
-      if (parts[2]) learner.main_language = parts[2];
+      if (parts[2]) {
+        learner.background_info = parts[2];
+        learner.main_language = parts[2];
+      }
       return learner;
     });
     if (items.length > 0) createBulk.mutate(items);
@@ -68,7 +75,7 @@ export default function AddLearners() {
 
   const parsedPreview = quickText.split("\n").filter(l => l.trim()).map(line => {
     const parts = line.split(",").map(s => s.trim());
-    return { name: parts[0], age: parts[1], lang: parts[2] };
+    return { name: parts[0], age: parts[1], context: parts[2] };
   });
 
   return (
@@ -99,9 +106,13 @@ export default function AddLearners() {
                 <Input type="number" value={manual.age} onChange={e => setManual(m => ({ ...m, age: e.target.value }))} placeholder="Ex : 25" className="mt-1.5" />
               </div>
               <div>
-                <Label className="font-body text-sm font-medium">Langue principale</Label>
-                <Input value={manual.main_language} onChange={e => setManual(m => ({ ...m, main_language: e.target.value }))} placeholder="Ex : espagnol" className="mt-1.5" />
+                <Label className="font-body text-sm font-medium">Contexte / parcours</Label>
+                <Input value={manual.background_info} onChange={e => setManual(m => ({ ...m, background_info: e.target.value }))} placeholder="Ex : débutant, L1..." className="mt-1.5" />
               </div>
+            </div>
+            <div>
+              <Label className="font-body text-sm font-medium">Profil initial (optionnel)</Label>
+              <Input value={manual.initial_profile_label} onChange={e => setManual(m => ({ ...m, initial_profile_label: e.target.value }))} placeholder="Ex : niveau A1, 3e, débutant..." className="mt-1.5" />
             </div>
             <div>
               <Label className="font-body text-sm font-medium">Notes</Label>
@@ -117,42 +128,28 @@ export default function AddLearners() {
           <div className="bg-card border border-border rounded-xl p-6 space-y-4">
             <div>
               <Label className="font-body text-sm font-medium">Coller la liste</Label>
-              <p className="text-xs text-muted-foreground font-body mb-2">Format : Prénom, âge, langue (une ligne par apprenant)</p>
-              <Textarea
-                value={quickText}
-                onChange={e => setQuickText(e.target.value)}
-                placeholder={"Lina, 9, espagnol\nSami, 15, arabe\nMaria, 32, portugais"}
-                className="mt-1 font-mono text-sm"
-                rows={6}
-              />
+              <p className="text-xs text-muted-foreground font-body mb-2">Format : Prénom, âge, contexte (une ligne par apprenant)</p>
+              <Textarea value={quickText} onChange={e => setQuickText(e.target.value)} placeholder={"Lina, 22, espagnol\nCarlos, 19\nMei, 24, chinois"} className="mt-1.5 font-mono text-sm" rows={8} />
             </div>
-
             {parsedPreview.length > 0 && (
-              <div>
-                <p className="text-xs font-body font-medium text-muted-foreground mb-2">Aperçu ({parsedPreview.length} apprenant{parsedPreview.length !== 1 ? "s" : ""})</p>
-                <div className="space-y-1">
+              <div className="bg-muted/50 rounded-lg p-3">
+                <p className="text-xs font-body font-medium text-muted-foreground mb-2">{parsedPreview.length} apprenant{parsedPreview.length > 1 ? "s" : ""} détecté{parsedPreview.length > 1 ? "s" : ""}</p>
+                <div className="flex flex-wrap gap-2">
                   {parsedPreview.map((p, i) => (
-                    <div key={i} className="bg-muted/50 rounded-lg px-3 py-2 text-sm font-body flex items-center gap-3">
-                      <span className="font-medium">{p.name}</span>
-                      {p.age && <span className="text-muted-foreground text-xs">{p.age}</span>}
-                      {p.lang && <span className="text-muted-foreground text-xs">{p.lang}</span>}
-                    </div>
+                    <span key={i} className="text-xs bg-background border border-border rounded px-2 py-1 font-body">{p.name}{p.age ? ` (${p.age})` : ""}</span>
                   ))}
                 </div>
               </div>
             )}
-
-            <Button onClick={handleQuickPaste} disabled={parsedPreview.length === 0 || createBulk.isPending} className="w-full font-body">
-              {createBulk.isPending ? "Ajout..." : `Ajouter ${parsedPreview.length} apprenant${parsedPreview.length !== 1 ? "s" : ""}`}
+            <Button onClick={handleQuickPaste} disabled={!quickText.trim() || createBulk.isPending} className="w-full font-body">
+              {createBulk.isPending ? "Import..." : `Importer ${parsedPreview.length || ""} apprenant${parsedPreview.length !== 1 ? "s" : ""}`}
             </Button>
           </div>
         </TabsContent>
       </Tabs>
 
-      <div className="text-center">
-        <Link to={`/classes/${classId}`}>
-          <Button variant="outline" className="font-body">Retour au profil de classe</Button>
-        </Link>
+      <div className="flex justify-end">
+        <Button variant="outline" onClick={() => navigate(`/classes/${classId}`)} className="font-body">Terminer</Button>
       </div>
     </div>
   );

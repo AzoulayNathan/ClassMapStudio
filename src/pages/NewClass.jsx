@@ -36,9 +36,8 @@ export default function NewClass() {
   }, []);
 
   useEffect(() => {
-    if (params.get("template") && templates.length) {
-      pickTemplate(params.get("template"));
-    }
+    if (params.get("browse") === "templates") setStep(0);
+    if (params.get("template") && templates.length) pickTemplate(params.get("template"));
   }, [params, templates]);
 
   const pickTemplate = (slug) => {

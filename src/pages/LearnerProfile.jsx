@@ -1,18 +1,18 @@
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
+import { useClassSubject } from "@/hooks/useClassSubject";
+import { getActiveCompetencies } from "@/lib/map-engine";
+import { payloadToScores } from "@/lib/observation-storage";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, Save, Trash2 } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import CompetencyBadge from "../components/CompetencyBadge";
-
-const levels = ["pré-A1", "A1", "A2", "B1", "B2", "inconnu"];
 
 export default function LearnerProfile() {
   const { learnerId } = useParams();
@@ -24,6 +24,8 @@ export default function LearnerProfile() {
     queryKey: ["learner", learnerId],
     queryFn: () => base44.entities.ClassLearner.get(learnerId),
   });
+
+  const { subject } = useClassSubject(learner?.class_id);
 
   const { data: learnerObs = [] } = useQuery({
     queryKey: ["learner-all-obs", learnerId],
@@ -46,6 +48,15 @@ export default function LearnerProfile() {
     },
   });
 
+  const lastObs = learnerObs[0];
+  const obsScores = useMemo(() => {
+    if (!lastObs || !subject) return [];
+    const scores = payloadToScores(lastObs, subject.competencies);
+    return getActiveCompetencies(subject, "standard")
+      .filter(c => scores[c.key])
+      .map(c => ({ label: c.short_label || c.label, value: scores[c.key] }));
+  }, [lastObs, subject]);
+
   if (isLoading || !form) {
     return <div className="flex items-center justify-center h-64"><div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" /></div>;
   }
@@ -54,10 +65,14 @@ export default function LearnerProfile() {
 
   const handleSave = () => {
     const { id, created_date, updated_date, created_by_id, ...data } = form;
-    updateMut.mutate(data);
+    updateMut.mutate({
+      ...data,
+      background_info: data.background_info || data.main_language,
+      initial_profile_label: data.initial_profile_label || data.initial_level_estimate,
+      main_language: data.background_info || data.main_language,
+      initial_level_estimate: data.initial_profile_label || data.initial_level_estimate,
+    });
   };
-
-  const lastObs = learnerObs[0];
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -85,29 +100,20 @@ export default function LearnerProfile() {
         </AlertDialog>
       </div>
 
-      {/* Last observation snapshot */}
-      {lastObs && (
+      {lastObs && obsScores.length > 0 && (
         <div className="bg-card border border-border rounded-xl p-5">
-          <h2 className="font-heading font-semibold text-sm mb-3">Dernière observation</h2>
+          <h2 className="font-heading font-semibold text-sm mb-3">Dernière observation{subject?.name ? ` · ${subject.name}` : ""}</h2>
           <div className="flex flex-wrap gap-2">
-            {[
-              ["Consignes", lastObs.instruction_comprehension],
-              ["Oral", lastObs.oral_production],
-              ["Écrit", lastObs.written_production],
-              ["Vocabulaire", lastObs.vocabulary],
-              ["Grammaire", lastObs.grammar_accuracy],
-              ["Autonomie", lastObs.autonomy],
-            ].map(([label, val]) => (
+            {obsScores.map(({ label, value }) => (
               <div key={label} className="flex items-center gap-1.5">
                 <span className="text-xs text-muted-foreground font-body">{label}:</span>
-                <CompetencyBadge level={val || "non observé"} size="sm" />
+                <CompetencyBadge level={value || "non observé"} size="sm" />
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* Edit form */}
       <div className="bg-card border border-border rounded-xl p-6 space-y-4">
         <h2 className="font-heading font-semibold">Informations</h2>
         <div className="grid grid-cols-2 gap-4">
@@ -120,22 +126,19 @@ export default function LearnerProfile() {
             <Input value={form.display_name || ""} onChange={e => set("display_name", e.target.value)} className="mt-1" />
           </div>
         </div>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 gap-4">
           <div>
             <Label className="font-body text-sm">Âge</Label>
             <Input type="number" value={form.age || ""} onChange={e => set("age", e.target.value ? Number(e.target.value) : null)} className="mt-1" />
           </div>
           <div>
-            <Label className="font-body text-sm">Langue principale</Label>
-            <Input value={form.main_language || ""} onChange={e => set("main_language", e.target.value)} className="mt-1" />
+            <Label className="font-body text-sm">Contexte / parcours</Label>
+            <Input value={form.background_info || form.main_language || ""} onChange={e => set("background_info", e.target.value)} className="mt-1" />
           </div>
-          <div>
-            <Label className="font-body text-sm">Niveau estimé</Label>
-            <Select value={form.initial_level_estimate || ""} onValueChange={v => set("initial_level_estimate", v)}>
-              <SelectTrigger className="mt-1"><SelectValue placeholder="—" /></SelectTrigger>
-              <SelectContent>{levels.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}</SelectContent>
-            </Select>
-          </div>
+        </div>
+        <div>
+          <Label className="font-body text-sm">Profil initial</Label>
+          <Input value={form.initial_profile_label || form.initial_level_estimate || ""} onChange={e => set("initial_profile_label", e.target.value)} placeholder="Ex : débutant, 3e, A1..." className="mt-1" />
         </div>
         <div>
           <Label className="font-body text-sm">Notes</Label>
